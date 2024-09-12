@@ -113,10 +113,14 @@
     </select>
 
     <!-- 计算总满意度 -->
-    <select id="getTotalSatisfactionRate" resultType="String">
+        <select id="getTotalSatisfactionRate" resultType="String">
         <if test="patientIds != null and patientIds.size > 0">
-            SELECT ROUND(SUM(CASE WHEN s.answer_score >= 3 THEN 1 ELSE 0 END)
+            SELECT ROUND(SUM(CASE WHEN avg_score >= 3 THEN 1 ELSE 0 END)
             / NULLIF(COUNT(*), 0), 2) * 100 AS totalSatisfactionRate
+            FROM (
+            -- 计算每个答卷的平均分
+            SELECT r.result_answer_id,
+            AVG(s.answer_score) AS avg_score
             FROM t_an_score s
             JOIN t_question q ON s.qu_id = q.qu_id
             JOIN t_follow_up_record r ON s.belong_answer_id = r.result_answer_id
@@ -126,8 +130,10 @@
                 #{id}
             </foreach>
             <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
-                AND s.qu_id = #{queryFilter.surveyId}
+                AND r.plan_answer_id = #{queryFilter.surveyId}
             </if>
+            GROUP BY r.result_answer_id
+            ) avg_scores
         </if>
         <if test="patientIds == null or patientIds.size == 0">
             SELECT '0' FROM DUAL
