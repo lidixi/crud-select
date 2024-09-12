@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.dyzc.function.mapper.SurveyMapper">
+
+    <!-- 根据过滤条件筛选患者 -->
+    <select id="filterPatients" resultType="String">
+        <choose>
+            <!-- 当 source == '1' 时，查询门诊患者信息 -->
+            <when test="queryFilter.source == 1 ">
+                SELECT DISTINCT patient_id
+                FROM t_outpatient_info
+                WHERE 1=1
+                <if test="queryFilter.deptCode != null and queryFilter.deptCode != ''">
+                    AND dept_code = #{queryFilter.deptCode}
+                </if>
+                AND first_diagnosis_time BETWEEN TO_DATE(#{queryFilter.startDate}, 'YYYY-MM-DD')
+                AND TO_DATE(#{queryFilter.endDate}, 'YYYY-MM-DD')
+            </when>
+
+            <!-- 当 source == '2' 时，查询住院患者信息 -->
+            <when test="queryFilter.source == 2 ">
+                SELECT DISTINCT patient_id
+                FROM t_pats_in_hospital
+                WHERE 1=1
+                <if test="queryFilter.deptCode != null and queryFilter.deptCode != ''">
+                    AND dept_admission_to_code = #{queryFilter.deptCode}
+                </if>
+                AND discharge_date_time BETWEEN TO_DATE(#{queryFilter.startDate}, 'YYYY-MM-DD')
+                AND TO_DATE(#{queryFilter.endDate}, 'YYYY-MM-DD')
+            </when>
+
+            <!-- 当 source == '3' 时，查询手术患者信息 -->
+            <when test="queryFilter.source == 3 ">
+                SELECT DISTINCT patient_id
+                FROM t_operation_master
+                WHERE 1=1
+                <if test="queryFilter.deptCode != null and queryFilter.deptCode != ''">
+                    AND exec_dept_code = #{queryFilter.deptCode}
+                </if>
+                AND scheduled_date_time BETWEEN TO_DATE(#{queryFilter.startDate}, 'YYYY-MM-DD')
+                AND TO_DATE(#{queryFilter.endDate}, 'YYYY-MM-DD')
+            </when>
+        </choose>
+    </select>
+
+    <!-- 统计已创建任务的患者 -->
+    <select id="getCreatedTaskPatients" resultType="int">
+        <if test="patientIds != null and patientIds.size > 0">
+            SELECT COUNT(DISTINCT patient_id)
+            FROM t_follow_execute_plan
+            WHERE patient_id IN
+            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        </if>
+        <if test="patientIds == null or patientIds.size == 0">
+            SELECT 0 FROM DUAL
+        </if>
+    </select>
+
+    <!-- 统计已完成随访的患者 -->
+    <select id="getCompletedFollowUpPatients" resultType="int">
+        <if test="patientIds != null and patientIds.size > 0">
+            SELECT COUNT(DISTINCT patient_id)
+            FROM t_follow_execute_plan
+            WHERE patient_id IN
+            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+            AND status != '0'
+            <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
+                AND plan_answer_id = #{queryFilter.surveyId}
+            </if>
+        </if>
+        <if test="patientIds == null or patientIds.size == 0">
+            SELECT 0 FROM DUAL
+        </if>
+    </select>
+
+    <!-- 统计已提交答卷的患者 -->
+    <select id="getSubmittedSurveyPatients" resultType="int">
+        <if test="patientIds != null and patientIds.size > 0">
+            SELECT COUNT(DISTINCT patient_id)
+            FROM t_follow_up_record
+            WHERE patient_id IN
+            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+            AND answer_status = '1'
+            <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
+                AND plan_answer_id = #{queryFilter.surveyId}
+            </if>
+        </if>
+        <if test="patientIds == null or patientIds.size == 0">
+            SELECT 0 FROM DUAL
+        </if>
+    </select>
+
+    <!-- 获取随访截止日期 -->
+    <select id="getNextPlanDate" resultType="String">
+        <if test="patientIds != null and patientIds.size > 0">
+            SELECT COALESCE(TO_CHAR(MAX(next_plan_date), 'YYYY-MM-DD'), 'N/A') AS next_plan_date
+            FROM t_follow_execute_plan
+            WHERE patient_id IN
+            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        </if>
+        <if test="patientIds == null or patientIds.size == 0">
+            SELECT 'N/A' FROM DUAL
+        </if>
+    </select>
+
+    <!-- 计算总满意度 -->
+    <select id="getTotalSatisfactionRate" resultType="String">
+        <if test="patientIds != null and patientIds.size > 0">
+            SELECT ROUND(SUM(CASE WHEN s.answer_score >= 3 THEN 1 ELSE 0 END)
+            / NULLIF(COUNT(*), 0), 2) * 100 AS totalSatisfactionRate
+            FROM t_an_score s
+            JOIN t_question q ON s.qu_id = q.qu_id
+            JOIN t_follow_up_record r ON s.belong_answer_id = r.result_answer_id
+            WHERE q.satisfaction_type = '1'
+            AND r.patient_id IN
+            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+            <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
+                AND s.qu_id = #{queryFilter.surveyId}
+            </if>
+        </if>
+        <if test="patientIds == null or patientIds.size == 0">
+            SELECT '0' FROM DUAL
+        </if>
+    </select>
+
+    <!-- 满意比例排名前三的选项 -->
+    <select id="getTopSatisfiedOptions" resultType="com.dyzc.function.domain.OptionSatisfactionRate">
+        <if test="patientIds != null and patientIds.size > 0">
+            SELECT * FROM (
+            SELECT option_name AS optionName,
+            ROUND(SUM(CASE WHEN s.answer_score >= 3 THEN 1 ELSE 0 END)
+            / NULLIF(COUNT(*), 0), 2) * 100 AS satisfactionRate
+            FROM t_an_score s
+            JOIN t_qu_score o ON s.qu_row_id = o.score_qu_id
+            <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
+                WHERE o.qu_id = #{queryFilter.surveyId}
+            </if>
+            AND s.belong_answer_id IN (
+            SELECT result_answer_id FROM t_follow_up_record
+            WHERE patient_id IN
+            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+            )
+            GROUP BY option_name
+            ORDER BY satisfactionRate DESC
+            ) WHERE ROWNUM &lt;= 3
+        </if>
+        <if test="patientIds == null or patientIds.size == 0">
+            SELECT 'N/A' AS optionName, '0' AS satisfactionRate FROM DUAL
+        </if>
+    </select>
+
+    <!-- 满意比例排名后三的选项 -->
+    <select id="getBottomSatisfiedOptions" resultType="com.dyzc.function.domain.OptionSatisfactionRate">
+        <if test="patientIds != null and patientIds.size > 0">
+            SELECT * FROM (
+            SELECT option_name AS optionName,
+            ROUND(SUM(CASE WHEN s.answer_score >= 3 THEN 1 ELSE 0 END)
+            / NULLIF(COUNT(*), 0), 2) * 100 AS satisfactionRate
+            FROM t_an_score s
+            JOIN t_qu_score o ON s.qu_row_id = o.score_qu_id
+            <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
+                WHERE o.qu_id = #{queryFilter.surveyId}
+            </if>
+            AND s.belong_answer_id IN (
+            SELECT result_answer_id FROM t_follow_up_record
+            WHERE patient_id IN
+            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+            )
+            GROUP BY option_name
+            ORDER BY satisfactionRate ASC
+            ) WHERE ROWNUM &lt;= 3
+        </if>
+        <if test="patientIds == null or patientIds.size == 0">
+            SELECT 'N/A' AS optionName, '0' AS satisfactionRate FROM DUAL
+        </if>
+    </select>
+
+</mapper>
