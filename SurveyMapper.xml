@@ -115,8 +115,8 @@
     <!-- 计算总满意度 -->
         <select id="getTotalSatisfactionRate" resultType="String">
         <if test="patientIds != null and patientIds.size > 0">
-            SELECT ROUND(SUM(CASE WHEN avg_score >= 3 THEN 1 ELSE 0 END)
-            / NULLIF(COUNT(*), 0), 2) * 100 AS totalSatisfactionRate
+            SELECT COALESCE(ROUND(SUM(CASE WHEN avg_score >= 3 THEN 1 ELSE 0 END)
+            / NULLIF(COUNT(*), 0), 2) * 100, 0) AS totalSatisfactionRate 
             FROM (
             -- 计算每个答卷的平均分
             SELECT r.result_answer_id,
