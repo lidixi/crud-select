@@ -149,16 +149,18 @@
             / NULLIF(COUNT(*), 0), 2) * 100 AS satisfactionRate
             FROM t_an_score s
             JOIN t_qu_score o ON s.qu_row_id = o.score_qu_id
-            <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
-                WHERE o.qu_id = #{queryFilter.surveyId}
-            </if>
-            AND s.belong_answer_id IN (
-            SELECT result_answer_id FROM t_follow_up_record
-            WHERE patient_id IN
-            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
-                #{id}
-            </foreach>
-            )
+            <where>
+                <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
+                    o.qu_id = #{queryFilter.surveyId}
+                </if>
+                AND s.belong_answer_id IN (
+                    SELECT result_answer_id FROM t_follow_up_record
+                    WHERE patient_id IN
+                    <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                        #{id}
+                    </foreach>
+                )
+            </where>
             GROUP BY option_name
             ORDER BY satisfactionRate DESC
             ) WHERE ROWNUM &lt;= 3
@@ -177,16 +179,18 @@
             / NULLIF(COUNT(*), 0), 2) * 100 AS satisfactionRate
             FROM t_an_score s
             JOIN t_qu_score o ON s.qu_row_id = o.score_qu_id
-            <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
-                WHERE o.qu_id = #{queryFilter.surveyId}
-            </if>
-            AND s.belong_answer_id IN (
-            SELECT result_answer_id FROM t_follow_up_record
-            WHERE patient_id IN
-            <foreach collection="patientIds" item="id" open="(" separator="," close=")">
-                #{id}
-            </foreach>
-            )
+            <where>
+                <if test="queryFilter.surveyId != null and queryFilter.surveyId != ''">
+                    o.qu_id = #{queryFilter.surveyId}
+                </if>
+                AND s.belong_answer_id IN (
+                    SELECT result_answer_id FROM t_follow_up_record
+                    WHERE patient_id IN
+                    <foreach collection="patientIds" item="id" open="(" separator="," close=")">
+                        #{id}
+                    </foreach>
+                )
+            </where>
             GROUP BY option_name
             ORDER BY satisfactionRate ASC
             ) WHERE ROWNUM &lt;= 3
